@@ -88,9 +88,9 @@ def main():
         for img in data['images']:
             img['id'] = image_id
             img['file_name']  = f'group_rgb/{group_name}/{frame_name}'
-            img['depth_path'] = f'group_depth/{group_name}/depth/{frame_name}'
-            img['lidar_path'] = f'group_intensity/{group_name}/lidar/{frame_name}'
-            img['event_path'] = f'group_ir/{group_name}/event/{frame_name}'
+            img['depth_path'] = f'group_depth/{group_name}{frame_name}'
+            img['lidar_path'] = f'group_intensity/{group_name}{frame_name}'
+            img['event_path'] = f'group_ir/{group_name}{frame_name}'
             test_images.append(img)
             image_id += 1
 
