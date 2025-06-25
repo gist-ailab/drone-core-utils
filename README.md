@@ -48,5 +48,4 @@ Drone Labeling Scripts
 {
 "description": "Converted from original label",
 "file_name": "frame_1741589575.571219.png",
-...
 }
