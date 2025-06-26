@@ -5,6 +5,7 @@ import glob
 import random
 from tqdm import tqdm
 
+IMG_ROOT = '/ailab_mat2/dataset/drone/drone_250610/images'
 ANN_PATH = '/ailab_mat2/dataset/drone/drone_250610/labels/train'
 TRAIN_JSON_PATH = '/ailab_mat2/dataset/drone/drone_250610/labels/train.json'
 TEST_JSON_PATH  = '/ailab_mat2/dataset/drone/drone_250610/labels/test.json'
@@ -46,6 +47,17 @@ def main():
     annotation_id = 1
     image_id      = 1
 
+    # 공통 체크 함수
+    def has_all_files(img_dict, group_name):
+        frame = os.path.basename(img_dict['file_name'])  # e.g. "0001.png"
+        paths = [
+            os.path.join(IMG_ROOT, 'group_rgb',    group_name, frame),
+            os.path.join(IMG_ROOT, 'group_depth',  group_name, frame),
+            os.path.join(IMG_ROOT, 'group_intensity', group_name, frame),
+            os.path.join(IMG_ROOT, 'group_ir',     group_name, frame),
+        ]
+        return all(os.path.exists(p) for p in paths)
+
     # --- train 파일 처리 ---
     for json_file in tqdm(train_files, desc='Building TRAIN set'):
         group_name = os.path.basename(os.path.dirname(json_file))
@@ -53,6 +65,12 @@ def main():
 
         with open(json_file, 'r') as f:
             data = json.load(f)
+
+        # **Skip this JSON if any of its image‐variants is missing on disk**
+        # (assumes data['images'] contains one entry per frame)
+        if not all(has_all_files(img, group_name) for img in data['images']):
+            tqdm.write(f"[SKIP] Missing files for {json_file}")
+            continue
 
         # annotations
         for ann in data['annotations']:
@@ -79,6 +97,10 @@ def main():
         with open(json_file, 'r') as f:
             data = json.load(f)
 
+        if not all(has_all_files(img, group_name) for img in data['images']):
+            tqdm.write(f"[SKIP] Missing files for {json_file}")
+            continue
+
         for ann in data['annotations']:
             ann['id']       = annotation_id
             ann['image_id'] = image_id
@@ -88,9 +110,9 @@ def main():
         for img in data['images']:
             img['id'] = image_id
             img['file_name']  = f'group_rgb/{group_name}/{frame_name}'
-            img['depth_path'] = f'group_depth/{group_name}{frame_name}'
-            img['lidar_path'] = f'group_intensity/{group_name}{frame_name}'
-            img['event_path'] = f'group_ir/{group_name}{frame_name}'
+            img['depth_path'] = f'group_depth/{group_name}/{frame_name}'
+            img['lidar_path'] = f'group_intensity/{group_name}/{frame_name}'
+            img['event_path'] = f'group_ir/{group_name}/{frame_name}'
             test_images.append(img)
             image_id += 1
 
@@ -98,7 +120,7 @@ def main():
     coco_common = {
         "info": {},
         "licenses": [],
-        "categories": data['categories'],  # 마지막에 읽힌 data의 categories 사용
+        "categories": data['categories'],
     }
 
     train_coco = {**coco_common, "images": train_images, "annotations": train_annotations}
