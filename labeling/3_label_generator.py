@@ -1,7 +1,6 @@
 from pycocotools.coco import COCO
 import os
 import json
-import glob
 import random
 from tqdm import tqdm
 
@@ -12,10 +11,6 @@ TEST_JSON_PATH  = '/ailab_mat2/dataset/drone/drone_250610/labels/test.json'
 TRAIN_RATIO = 0.8
 
 def get_grouped_json_files(ann_path):
-    """
-    ann_path 하위의 모든 json 파일을
-    group_name(=json 파일이 있는 디렉토리 이름) 기준으로 묶어서 dict 반환
-    """
     group_jsons = {}
     for dirpath, dirnames, filenames in os.walk(ann_path):
         jsons = [os.path.join(dirpath, f) for f in filenames if f.endswith('.json')]
@@ -24,62 +19,81 @@ def get_grouped_json_files(ann_path):
             group_jsons[group] = jsons
     return group_jsons
 
+def adjust_bbox(bbox):
+    """
+    bbox: [x, y, w, h] in the 960-wide concat image.
+    Returns a new [x, y, w, h] in a single 480-wide image,
+    clamped/translated as described.
+    """
+    x, y, w, h = bbox
+    x2 = x + w
+
+    # 1) 완전 RGB 영역
+    if x2 <= 480:
+        return [x, y, w, h]
+
+    # 2) RGB→IR 경계 넘긴 박스: 오른쪽 끝을 480에 클램핑
+    if x < 480 < x2:
+        new_w = 480 - x
+        return [x, y, new_w, h]
+
+    # 3) 완전 IR 영역
+    if x >= 480:
+        new_x = x - 480
+        return [new_x, y, w, h]
+
+    # (이외의 경우, e.g. 완전히 밖으로 벗어나면 None 처리)
+    return None
+
 def main():
-    # 1) 그룹 단위로 JSON 파일 묶기
     group_jsons = get_grouped_json_files(ANN_PATH)
     groups = list(group_jsons.keys())
     random.shuffle(groups)
 
-    # 2) 그룹 비율에 따라 split
     train_count = int(len(groups) * TRAIN_RATIO)
     train_groups = groups[:train_count]
     test_groups  = groups[train_count:]
 
-    # 3) 각 그룹 안의 파일들을 펼쳐서 최종 리스트 생성
     train_files = [f for g in train_groups for f in group_jsons[g]]
     test_files  = [f for g in test_groups  for f in group_jsons[g]]
 
-    train_annotations = []
-    test_annotations  = []
-    train_images      = []
-    test_images       = []
+    train_annotations, test_annotations = [], []
+    train_images,      test_images      = [], []
 
     annotation_id = 1
     image_id      = 1
 
-    # 공통 체크 함수
     def has_all_files(img_dict, group_name):
-        frame = os.path.basename(img_dict['file_name'])  # e.g. "0001.png"
+        frame = os.path.basename(img_dict['file_name'])
         paths = [
-            os.path.join(IMG_ROOT, 'group_rgb',    group_name, frame),
-            os.path.join(IMG_ROOT, 'group_depth',  group_name, frame),
-            os.path.join(IMG_ROOT, 'group_intensity', group_name, frame),
-            os.path.join(IMG_ROOT, 'group_ir',     group_name, frame),
+            os.path.join(IMG_ROOT, 'group_rgb',      group_name, frame),
+            os.path.join(IMG_ROOT, 'group_depth',    group_name, frame),
+            os.path.join(IMG_ROOT, 'group_intensity',group_name, frame),
+            os.path.join(IMG_ROOT, 'group_ir',       group_name, frame),
         ]
         return all(os.path.exists(p) for p in paths)
 
-    # --- train 파일 처리 ---
+    # --- TRAIN ---
     for json_file in tqdm(train_files, desc='Building TRAIN set'):
         group_name = os.path.basename(os.path.dirname(json_file))
         frame_name = os.path.basename(json_file).replace('.json', '.png')
-
         with open(json_file, 'r') as f:
             data = json.load(f)
 
-        # **Skip this JSON if any of its image‐variants is missing on disk**
-        # (assumes data['images'] contains one entry per frame)
         if not all(has_all_files(img, group_name) for img in data['images']):
             tqdm.write(f"[SKIP] Missing files for {json_file}")
             continue
 
-        # annotations
         for ann in data['annotations']:
-            ann['id']       = annotation_id
-            ann['image_id'] = image_id
+            new_bbox = adjust_bbox(ann['bbox'])
+            if new_bbox is None:
+                continue  # (원한다면 완전히 벗어난 박스는 버림)
+            ann['bbox']       = new_bbox
+            ann['id']         = annotation_id
+            ann['image_id']   = image_id
             train_annotations.append(ann)
-            annotation_id += 1
+            annotation_id   += 1
 
-        # images
         for img in data['images']:
             img['id'] = image_id
             img['file_name']  = f'group_rgb/{group_name}/{frame_name}'
@@ -89,11 +103,10 @@ def main():
             train_images.append(img)
             image_id += 1
 
-    # --- test 파일 처리 ---
+    # --- TEST ---
     for json_file in tqdm(test_files, desc='Building TEST set'):
         group_name = os.path.basename(os.path.dirname(json_file))
         frame_name = os.path.basename(json_file).replace('.json', '.png')
-
         with open(json_file, 'r') as f:
             data = json.load(f)
 
@@ -102,10 +115,14 @@ def main():
             continue
 
         for ann in data['annotations']:
-            ann['id']       = annotation_id
-            ann['image_id'] = image_id
+            new_bbox = adjust_bbox(ann['bbox'])
+            if new_bbox is None:
+                continue
+            ann['bbox']       = new_bbox
+            ann['id']         = annotation_id
+            ann['image_id']   = image_id
             test_annotations.append(ann)
-            annotation_id += 1
+            annotation_id   += 1
 
         for img in data['images']:
             img['id'] = image_id
@@ -116,17 +133,14 @@ def main():
             test_images.append(img)
             image_id += 1
 
-    # --- COCO 포맷 딕셔너리 작성 ---
     coco_common = {
         "info": {},
         "licenses": [],
         "categories": data['categories'],
     }
-
     train_coco = {**coco_common, "images": train_images, "annotations": train_annotations}
     test_coco  = {**coco_common, "images": test_images,  "annotations": test_annotations}
 
-    # --- JSON으로 덤프 ---
     with open(TRAIN_JSON_PATH, 'w') as f:
         json.dump(train_coco, f)
     with open(TEST_JSON_PATH, 'w') as f:
