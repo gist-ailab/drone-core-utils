@@ -6,7 +6,7 @@ import numpy as np
 # --- 경로 설정 (기존과 동일) ---
 ROOT = '/ailab_mat2/dataset/drone/250312_sejong/drone_250312_sejong_multimodal_coco/images'
 RGB_ROOT = os.path.join(ROOT, 'group_rgb')
-MODAL_ROOOT = RGB_ROOT.replace('group_rgb', 'group_intensity')
+MODAL_ROOOT = RGB_ROOT.replace('group_rgb', 'group_ir')
 SAVE_ROOT = '/ailab_mat2/dataset/drone/250312_sejong/drone_250312_sejong_multimodal_coco/heuristic_aligned'
 
 rgb_paths = sorted(glob.glob(os.path.join(RGB_ROOT, '**', '*.png'), recursive=True))
@@ -73,26 +73,21 @@ def align_image(modal_img, params, target_shape):
     aligned_modal = cv2.warpAffine(modal_img, M, (w, h))
     return aligned_modal
 
-
 def main():
     """
-    ❗ 메인 로직 수정: 탐색 후 'group_ir'의 모든 하위 폴더에 일괄 처리
+    ❗ 메인 로직 수정: 저장 경로에 모달리티 폴더 이름을 포함하도록 변경
     """
     i = 0
     last_params = {'tx': 0, 'ty': 0, 'angle': 0.0, 'scale': 1.0}
 
     while i < len(rgb_paths):
-        # 인덱스 범위 조정
+        # (이전과 동일한 탐색 및 이미지 로드 로직...)
         if i >= len(rgb_paths):
             i = len(rgb_paths) - 1
-        
         rgb_path = rgb_paths[i]
         relative_path = os.path.relpath(rgb_path, RGB_ROOT)
         modal_path = os.path.join(MODAL_ROOOT, relative_path)
-        
         print(f"\n[{i+1}/{len(rgb_paths)}] 탐색 중: {relative_path}")
-
-        # 이미지 로드
         if not os.path.exists(modal_path):
             i += 1
             continue
@@ -101,29 +96,33 @@ def main():
         if rgb_img is None or modal_img is None:
             i += 1
             continue
-
-        # --- Phase 1: 대화형 탐색 및 파라미터 설정 ---
         params, action = get_manual_params(rgb_img, modal_img, last_params)
 
-        # --- Phase 2: 액션에 따른 처리 ---
         if action == 'save': # Enter 키를 눌렀을 때
             master_params = params
             
-            # ❗ 사용자에게 일괄 처리 범위 변경 안내 및 확인
+            # ❗ 1. 현재 모달리티 폴더 이름 가져오기
+            # 예: MODAL_ROOOT가 '.../group_intensity'라면 'group_intensity'를 가져옴
+            modality_folder_name = os.path.basename(MODAL_ROOOT)
+            
+            # ❗ 2. 최종 저장될 기본 경로를 새로 정의
+            final_save_root = os.path.join(SAVE_ROOT, modality_folder_name)
+
             cv2.destroyAllWindows()
             print("\n" + "="*50)
-            print(f"현재 파라미터로 `group_ir` 아래의 ✨모든 폴더와 이미지✨를 변환 및 저장합니다.")
-            print(f"적용될 파라미터: {master_params}")
+            # ❗ 3. 사용자 안내 메시지에 새로운 저장 경로 표시
+            print(f"현재 파라미터로 모든 이미지를 변환하여 아래 경로에 저장합니다.")
+            print(f"▶ 저장 위치: {final_save_root}")
+            print(f"▶ 적용 파라미터: {master_params}")
             confirm = input("계속 진행하시겠습니까? (y/n): ")
             print("="*50)
 
             if confirm.lower() != 'y':
                 print("--> 작업을 취소했습니다. 계속 탐색합니다.")
-                last_params = params # 취소했어도 작업하던 파라미터는 유지
-                continue # while 루프 계속
+                last_params = params
+                continue
 
             # --- 일괄 처리 시작 ---
-            # ❗ 처리할 파일 목록 생성 방식 변경: MODAL_ROOOT 아래의 모든 png 파일을 재귀적으로 검색
             print(f"\n`{MODAL_ROOOT}` 경로의 모든 하위 이미지를 검색합니다...")
             modal_files_to_process = sorted(glob.glob(os.path.join(MODAL_ROOOT, '**', '*.png'), recursive=True))
             total_files = len(modal_files_to_process)
@@ -151,12 +150,13 @@ def main():
 
                 aligned = align_image(m_img, master_params, r_img.shape)
                 
-                s_path = os.path.join(SAVE_ROOT, curr_rel_path)
+                # ❗ 4. 새로 정의된 저장 경로(final_save_root)를 사용하여 최종 저장 경로 계산
+                s_path = os.path.join(final_save_root, curr_rel_path)
                 os.makedirs(os.path.dirname(s_path), exist_ok=True)
                 cv2.imwrite(s_path, aligned)
 
             print("\n--- 일괄 처리가 완료되었습니다. 프로그램을 종료합니다. ---")
-            break # 작업이 끝났으므로 while 루프 탈출
+            break
             
         elif action == 'next':
             last_params = params
@@ -170,9 +170,5 @@ def main():
             
 if __name__ == '__main__':
     main()
-
-if __name__ == '__main__':
-    main()
-    
     
 #적용될 파라미터: {'tx': 45, 'ty': 90, 'angle': -0.5, 'scale': 1.02}
