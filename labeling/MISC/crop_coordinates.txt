@@ -1,0 +1,5 @@
+# Crop coordinates for frame_1741589576.111370.png
+# Image size: 480x640
+x1, y1 = 37, 107
+x2, y2 = 479, 488
+# Crop size: 442x381

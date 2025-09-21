@@ -2,24 +2,135 @@ import os
 import json
 import cv2
 from tqdm import tqdm
+import re
 
-# --- 설정 (Configuration) ---
-# 자를 영역 좌표
-x1, y1 = 40, 110
-x2, y2 = 480, 480
+def read_crop_coordinates(coord_file_path):
+    """
+    crop_coordinates.txt 파일에서 좌표를 읽어오는 함수
+    """
+    if not os.path.exists(coord_file_path):
+        print(f"Coordinates file not found: {coord_file_path}")
+        return None
+    
+    try:
+        with open(coord_file_path, 'r') as f:
+            content = f.read()
+        
+        # x1, y1 = 37, 107 형태의 패턴 찾기
+        x1_y1_match = re.search(r'x1,\s*y1\s*=\s*(\d+),\s*(\d+)', content)
+        x2_y2_match = re.search(r'x2,\s*y2\s*=\s*(\d+),\s*(\d+)', content)
+        
+        if x1_y1_match and x2_y2_match:
+            x1, y1 = int(x1_y1_match.group(1)), int(x1_y1_match.group(2))
+            x2, y2 = int(x2_y2_match.group(1)), int(x2_y2_match.group(2))
+            
+            print(f"Loaded crop coordinates: ({x1}, {y1}) -> ({x2}, {y2})")
+            print(f"Crop size: {x2-x1}x{y2-y1}")
+            return x1, y1, x2, y2
+        else:
+            print("Could not parse coordinates from file")
+            return None
+            
+    except Exception as e:
+        print(f"Error reading coordinates file: {e}")
+        return None
 
-ROOT = '/media/ailab/SSD2/Workspace/dst/drone_250312_sejong_multimodal_coco_cropped'
-subfolder_prefix = 'images'
-save_folder_prefix = 'images_cropped3' # 저장할 폴더 이름
-JSON_PATH = os.path.join(ROOT, 'labels', 'train.json')
-SAVE_JSON_PATH = os.path.join(ROOT, 'labels', 'train_cropped3.json')
+def get_user_input():
+    """
+    사용자로부터 설정 정보를 입력받는 함수
+    """
+    print("="*60)
+    print("INTERACTIVE CROP DATASET TOOL")
+    print("="*60)
+    
+    # 1. 좌표 파일 경로
+    default_coord_path = "/media/ailab/HDD1/Workspace/src/Project/Drone24/drone-core-utils/labeling/MISC/crop_coordinates.txt"
+    coord_path = input(f"Enter crop coordinates file path\n(default: {default_coord_path})\n> ").strip()
+    if not coord_path:
+        coord_path = default_coord_path
+    
+    # 2. 좌표 읽기
+    coords = read_crop_coordinates(coord_path)
+    if coords is None:
+        print("Failed to load coordinates. Exiting.")
+        return None
+    
+    x1, y1, x2, y2 = coords
+    
+    # 3. ROOT 디렉토리
+    default_root = "/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejong/250312_sejong/drone_250312_sejong_multimodal_coco_synced"
+    root_dir = input(f"Enter dataset ROOT directory\n(default: {default_root})\n> ").strip()
+    if not root_dir:
+        root_dir = default_root
+    
+    # 4. 입력 폴더 이름
+    default_input = "images"
+    input_folder = input(f"Enter input folder name\n(default: {default_input})\n> ").strip()
+    if not input_folder:
+        input_folder = default_input
+    
+    # 5. 출력 폴더 이름
+    default_output = f"images_cropped_{x2-x1}x{y2-y1}"
+    output_folder = input(f"Enter output folder name\n(default: {default_output})\n> ").strip()
+    if not output_folder:
+        output_folder = default_output
+    
+    # 6. JSON 파일 이름
+    default_json = "train.json"
+    json_name = input(f"Enter input JSON filename\n(default: {default_json})\n> ").strip()
+    if not json_name:
+        json_name = default_json
+    
+    # 7. 출력 JSON 파일 이름
+    json_base = os.path.splitext(json_name)[0]
+    default_output_json = f"{json_base}_cropped_{x2-x1}x{y2-y1}.json"
+    output_json = input(f"Enter output JSON filename\n(default: {default_output_json})\n> ").strip()
+    if not output_json:
+        output_json = default_output_json
+    
+    config = {
+        'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+        'root_dir': root_dir,
+        'input_folder': input_folder,
+        'output_folder': output_folder,
+        'json_path': os.path.join(root_dir, 'labels', json_name),
+        'output_json_path': os.path.join(root_dir, 'labels', output_json)
+    }
+    
+    # 설정 확인
+    print("\n" + "-"*60)
+    print("CONFIGURATION SUMMARY:")
+    print("-"*60)
+    print(f"Crop coordinates: ({x1}, {y1}) -> ({x2}, {y2})")
+    print(f"Crop size: {x2-x1}x{y2-y1}")
+    print(f"ROOT directory: {root_dir}")
+    print(f"Input folder: {input_folder}")
+    print(f"Output folder: {output_folder}")
+    print(f"Input JSON: {config['json_path']}")
+    print(f"Output JSON: {config['output_json_path']}")
+    print("-"*60)
+    
+    confirm = input("Proceed with these settings? (y/N): ").strip().lower()
+    if confirm != 'y':
+        print("Operation cancelled.")
+        return None
+    
+    return config
 
 
-def crop_and_filter_coco():
+def crop_and_filter_coco(config):
     """
     COCO 데이터셋의 이미지를 자르고, 그에 맞게 Annotation을 필터링 및 수정합니다.
     잘린 영역에 걸치는 바운딩 박스는 좌표를 재계산합니다.
     """
+    # 설정에서 변수 추출
+    x1, y1, x2, y2 = config['x1'], config['y1'], config['x2'], config['y2']
+    ROOT = config['root_dir']
+    subfolder_prefix = config['input_folder']
+    save_folder_prefix = config['output_folder']
+    JSON_PATH = config['json_path']
+    SAVE_JSON_PATH = config['output_json_path']
+    
     # 1. JSON 파일 로드
     print(f"'{JSON_PATH}' 파일을 로드합니다...")
     with open(JSON_PATH, 'r') as f:
@@ -134,4 +245,12 @@ def crop_and_filter_coco():
         json.dump(new_coco_data, f, indent=4)
 
 if __name__ == '__main__':
-    crop_and_filter_coco()
+    # 사용자 입력을 통해 설정 가져오기
+    config = get_user_input()
+    
+    if config is not None:
+        print("\nStarting crop and filter process...")
+        crop_and_filter_coco(config)
+        print("\nProcess completed successfully!")
+    else:
+        print("Process aborted.")

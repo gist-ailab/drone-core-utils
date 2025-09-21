@@ -4,10 +4,10 @@ import cv2
 import numpy as np
 
 # --- 경로 설정 (기존과 동일) ---
-ROOT = '/ailab_mat2/dataset/drone/250312_sejong/drone_250312_sejong_multimodal_coco/images'
+ROOT = '/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejong/250312_sejong/drone_250312_sejong_multimodal_coco_synced/images'
 RGB_ROOT = os.path.join(ROOT, 'group_rgb')
 MODAL_ROOOT = RGB_ROOT.replace('group_rgb', 'group_ir')
-SAVE_ROOT = '/ailab_mat2/dataset/drone/250312_sejong/drone_250312_sejong_multimodal_coco/heuristic_aligned'
+SAVE_ROOT = '/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejong/250312_sejong/drone_250312_sejong_multimodal_coco_synced/images_heuristic'
 
 rgb_paths = sorted(glob.glob(os.path.join(RGB_ROOT, '**', '*.png'), recursive=True))
 
@@ -52,10 +52,10 @@ def get_manual_params(rgb_img, modal_img, initial_params):
             break
         elif key == ord('r'):
             params = {'tx': 0, 'ty': 0, 'angle': 0.0, 'scale': 1.0}
-        elif key == ord('w'): params['ty'] -= 5
-        elif key == ord('s'): params['ty'] += 5
-        elif key == ord('a'): params['tx'] -= 5
-        elif key == ord('d'): params['tx'] += 5
+        elif key == ord('w'): params['ty'] -= 2
+        elif key == ord('s'): params['ty'] += 2
+        elif key == ord('a'): params['tx'] -= 2
+        elif key == ord('d'): params['tx'] += 2
         elif key == ord('h'): params['angle'] -= 0.5
         elif key == ord('j'): params['angle'] += 0.5
         elif key == ord('k'): params['scale'] -= 0.01
