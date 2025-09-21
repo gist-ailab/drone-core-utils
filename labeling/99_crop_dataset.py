@@ -64,19 +64,19 @@ def get_user_input():
         root_dir = default_root
     
     # 4. 입력 폴더 이름
-    default_input = "images"
+    default_input = "images_heuristic"
     input_folder = input(f"Enter input folder name\n(default: {default_input})\n> ").strip()
     if not input_folder:
         input_folder = default_input
     
     # 5. 출력 폴더 이름
-    default_output = f"images_cropped_{x2-x1}x{y2-y1}"
+    default_output = f"images_heuristic_cropped_{x2-x1}x{y2-y1}"
     output_folder = input(f"Enter output folder name\n(default: {default_output})\n> ").strip()
     if not output_folder:
         output_folder = default_output
     
     # 6. JSON 파일 이름
-    default_json = "train.json"
+    default_json = "train_filtered.json"
     json_name = input(f"Enter input JSON filename\n(default: {default_json})\n> ").strip()
     if not json_name:
         json_name = default_json

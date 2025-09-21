@@ -12,7 +12,6 @@ SAVE_ROOT = '/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejo
 rgb_paths = sorted(glob.glob(os.path.join(RGB_ROOT, '**', '*.png'), recursive=True))
 
 # get_manual_params 함수와 align_image 함수는 이전과 동일하게 사용합니다.
-# (코드가 길어 생략)
 def get_manual_params(rgb_img, modal_img, initial_params):
     """
     (기존과 동일) 정렬 전/후를 비교하는 화면을 제공합니다.

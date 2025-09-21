@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 class CropSelector:
-    def __init__(self, image_path):
+    def __init__(self, image_path, lidar_path):
         """
         이미지에서 인터랙티브하게 crop 영역을 선택하는 클래스
         """
@@ -14,6 +14,7 @@ class CropSelector:
         self.end_point = None
         self.drawing = False
         self.crop_coords = None
+        self.lidar_path = lidar_path
         
         # 이미지 로드
         self.load_image()
@@ -24,6 +25,8 @@ class CropSelector:
             raise FileNotFoundError(f"Image not found: {self.image_path}")
             
         self.original_img = cv2.imread(self.image_path)
+        self.original_lidar = cv2.imread(self.lidar_path)
+        self.original_img = cv2.addWeighted(self.original_img, 0.5, self.original_lidar, 0.5, 0)
         if self.original_img is None:
             raise ValueError(f"Failed to load image: {self.image_path}")
             
@@ -183,17 +186,17 @@ class CropSelector:
 def main():
     """메인 함수"""
     # 기본 이미지 경로 (사용자가 지정한 이미지)
-    default_image_path = "/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejong/250312_sejong/drone_250312_sejong_multimodal_coco/images/group_ir/group_00/frame_1741589576.111370.png"
-    
+    default_ir_path = "/media/ailab/HDD1/Workspace/dset/Drone-Detection-Custom/250312_sejong/250312_sejong/drone_250312_sejong_multimodal_coco_synced/images_heuristic/group_ir/group_00/frame_1741589576.111370.png"
+    default_lidar_path = default_ir_path.replace('group_ir', 'group_intensity')
     # 이미지 경로 입력 받기
-    image_path = input(f"Enter image path (or press Enter for default):\n{default_image_path}\n> ").strip()
-    
+    image_path = input(f"Enter image path (or press Enter for default):\n{default_ir_path}\n> ").strip()
+    lidar_path = input(f"Enter lidar path (or press Enter for default):\n{default_lidar_path}\n> ").strip()
     if not image_path:
-        image_path = default_image_path
-        
+        image_path = default_ir_path
+        lidar_path = default_lidar_path
     try:
         # CropSelector 실행
-        selector = CropSelector(image_path)
+        selector = CropSelector(image_path, lidar_path)
         coordinates = selector.run()
         
         if coordinates:
